@@ -225,6 +225,16 @@ public class RequestController implements Service<RequestController>, ServerActi
             //if this happens we just call requestComplete(), as the listener can only be invoked once it does not
             //matter if it has already been invoked
             if(!force && paused) {
+                /* PERSONAL NOTE:
+                 * This `if` statement is entered when the previous while loop [line 215] increases the number of
+                 * activeRequestCountUpdater (which means that a ControlPointTask must be run after this method
+                 * [beginRequest] has been called) and the container changes its status to `paused = true`
+                 * (and, obviously, `force` must be `== false` otherwise `RunResult.REJECTED` cannot be
+                 * returned [i.e. only `RunResult.RUN` can be returned when `force == true`)). In this `if` statement,
+                 * requestComplete() is called, which eventually runs a ControlPointTask without passing through this
+                 * method [beginRequest]. In other words, this `if` statement forces the execution of the task that
+                 * the while loop at line 215 has (logically) started
+                 */
                 requestComplete();
                 return RunResult.REJECTED;
             }
@@ -235,6 +245,9 @@ public class RequestController implements Service<RequestController>, ServerActi
     }
 
     void requestComplete() {
+        /* PERSONAL NOTE:
+         * This method forces the execution of a forceRun QueuedTask (i.e. a task with higher privileges)
+         */
         runQueuedTask(true);
     }
 
@@ -375,6 +388,10 @@ public class RequestController implements Service<RequestController>, ServerActi
      * @param hasPermit If the caller has already called {@link #beginRequest(boolean force)}
      */
     private boolean runQueuedTask(boolean hasPermit) {
+         /* PERSONAL NOTE:
+          * if hasPermit == true, this check is skipped; this means that
+          * activeRequestCountUpdater is not increased and a task from the queue is executed
+          */
         if (!hasPermit && beginRequest(paused) == RunResult.REJECTED) {
             return false;
         }
