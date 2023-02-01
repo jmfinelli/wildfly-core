@@ -1,6 +1,9 @@
 package org.jboss.as.server.suspend;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -32,7 +35,7 @@ public class SuspendController implements Service<SuspendController> {
 
     private State state = State.SUSPENDED;
 
-    private final List<ServerActivity> activities = new ArrayList<>();
+    private final Deque<ServerActivity> activities = new ArrayDeque<>();
 
     private final List<OperationListener> operationListeners = new ArrayList<>();
 
@@ -76,11 +79,15 @@ public class SuspendController implements Service<SuspendController> {
         } else {
             CountingRequestCountCallback cb = new CountingRequestCountCallback(outstandingCount, () -> {
                 state = State.SUSPENDING;
+                // Processing the deque with an {@link Iterator} means that {@link ServerActivity}
+                // will be suspended with a LIFO logic
                 for (ServerActivity activity : activities) {
                     activity.suspended(SuspendController.this.listener);
                 }
             });
 
+            // Processing the deque with an {@link Iterator} means that {@link ServerActivity}
+            // will be pre-suspended with a LIFO logic
             for (ServerActivity activity : activities) {
                 activity.preSuspend(cb);
             }
@@ -123,18 +130,22 @@ public class SuspendController implements Service<SuspendController> {
         for(OperationListener listener: new ArrayList<>(operationListeners)) {
             listener.cancelled();
         }
-        for (ServerActivity activity : activities) {
+        // Processing the deque with a descendingIterator means that {@link ServerActivity}
+        // will be resumed with a FIFO logic
+        Iterator<ServerActivity> reverseOrderIterator = activities.descendingIterator();
+        while (reverseOrderIterator.hasNext()) {
+            ServerActivity nextActivity = reverseOrderIterator.next();
             try {
-                activity.resume();
+                nextActivity.resume();
             } catch (Exception e) {
-                ServerLogger.ROOT_LOGGER.failedToResume(activity, e);
+                ServerLogger.ROOT_LOGGER.failedToResume(nextActivity, e);
             }
         }
         state = State.RUNNING;
     }
 
     public synchronized void registerActivity(final ServerActivity activity) {
-        this.activities.add(activity);
+        this.activities.push(activity);
         if(state != State.RUNNING) {
             //if the activity is added when we are not running we just immediately suspend it
             //this should only happen at boot, so there should be no outstanding requests anyway
