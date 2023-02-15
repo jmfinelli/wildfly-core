@@ -1,5 +1,7 @@
 package org.jboss.as.server.suspend;
 
+import java.util.concurrent.Callable;
+
 /**
  * A server activity that may have to finish before the server can shut down gracefully.
  *
@@ -14,18 +16,18 @@ public interface ServerActivity {
      *
      * @param listener The listener to invoker when the pre-pause phase is done
      */
-    void preSuspend(ServerActivityCallback listener);
+    Callable<Void> preSuspend(ServerActivityCallback listener);
 
     /**
      * Invoked once the suspend process has started. One this has been invoked
      * no new requests should be allowed to proceeed
      * @param listener The listener to invoke when suspend is done.
      */
-    void suspended(ServerActivityCallback listener);
+    Callable<Void> suspended(ServerActivityCallback listener);
 
     /**
      * Invoked if the suspend or pre-suspened is cancelled
      */
-    void resume();
+    Callable<Void> resume();
 
 }

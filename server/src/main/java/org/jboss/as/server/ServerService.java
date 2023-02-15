@@ -316,6 +316,7 @@ public final class ServerService extends AbstractControllerService {
             final boolean suspend = runningModeControl.getSuspend()!= null ? runningModeControl.getSuspend() : serverEnvironment.isStartSuspended();
             final boolean gracefulStartup = serverEnvironment.isStartGracefully();
             suspendController.setStartSuspended(suspend);
+            suspendController.setExecutorService(getExecutorService());
             runningModeControl.setSuspend(false);
             if (!gracefulStartup) {
                 if (suspend) {

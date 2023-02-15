@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -84,8 +85,13 @@ public class RequestController implements Service<RequestController>, ServerActi
     }
 
     @Override
-    public void preSuspend(ServerActivityCallback listener) {
-        listener.done();
+    public Callable<Void> preSuspend(ServerActivityCallback listener) {
+        return new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                return listener.done();
+            }
+        };
     }
 
     private Timer timer;
@@ -100,30 +106,37 @@ public class RequestController implements Service<RequestController>, ServerActi
      *
      * @param requestCountListener The listener that will be notified when all requests are done
      */
-    public synchronized void suspended(ServerActivityCallback requestCountListener) {
+    public synchronized Callable<Void> suspended(ServerActivityCallback requestCountListener) {
         this.paused = true;
         listenerUpdater.set(this, requestCountListener);
 
         if (activeRequestCountUpdater.get(this) == 0) {
             if (listenerUpdater.compareAndSet(this, requestCountListener, null)) {
-                requestCountListener.done();
+                return requestCountListener::done;
             }
         }
+        return () -> null;
     }
 
     /**
      * Unpause the server, allowing it to resume normal operations
      */
     @Override
-    public synchronized void resume() {
+    public synchronized Callable<Void> resume() {
         this.paused = false;
         ServerActivityCallback listener = listenerUpdater.get(this);
         if (listener != null) {
             listenerUpdater.compareAndSet(this, listener, null);
         }
-        while (!taskQueue.isEmpty() && (activeRequestCount < maxRequestCount || maxRequestCount < 0)) {
-            runQueuedTask(false);
-        }
+        return new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                while (!taskQueue.isEmpty() && (activeRequestCount < maxRequestCount || maxRequestCount < 0)) {
+                    runQueuedTask(false);
+                }
+                return (Void)new Object();
+            }
+        };
     }
 
     /**

@@ -41,12 +41,12 @@ public class CountingRequestCountCallback implements ServerActivityCallback {
     }
 
     @Override
-    public void done() {
+    public Void done() {
         if (count.decrementAndGet() == 0) {
             if(delegate != null) {
                 delegate.done();
             }
         }
+        return null;
     }
-
 }

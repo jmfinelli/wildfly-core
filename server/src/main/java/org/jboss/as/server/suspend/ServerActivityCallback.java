@@ -11,5 +11,5 @@ public interface ServerActivityCallback {
     /**
      * Method that is invoked when the relevant entry point is done suspended
      */
-    void done();
+    Void done();
 }

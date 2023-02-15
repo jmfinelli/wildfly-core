@@ -7,6 +7,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+
 import org.jboss.as.controller.notification.NotificationHandlerRegistry;
 import org.jboss.as.server.logging.ServerLogger;
 import org.jboss.msc.service.Service;
@@ -34,6 +36,8 @@ public class SuspendController implements Service<SuspendController> {
     private Timer timer;
 
     private State state = State.SUSPENDED;
+
+    private ExecutorService executorService;
 
     private final Deque<ServerActivity> activities = new ArrayDeque<>();
 
@@ -77,19 +81,21 @@ public class SuspendController implements Service<SuspendController> {
         if (outstandingCount == 0) {
             handlePause();
         } else {
+            final ExecutorService executorService = this.executorService;
             CountingRequestCountCallback cb = new CountingRequestCountCallback(outstandingCount, () -> {
                 state = State.SUSPENDING;
                 // Processing the deque with an {@link Iterator} means that {@link ServerActivity}
-                // will be suspended with a LIFO logic
+                // will be suspe nded with a LIFO logic
                 for (ServerActivity activity : activities) {
-                    activity.suspended(SuspendController.this.listener);
+                    executorService.submit(activity.suspended(SuspendController.this.listener));
                 }
+                return null;
             });
 
             // Processing the deque with an {@link Iterator} means that {@link ServerActivity}
             // will be pre-suspended with a LIFO logic
             for (ServerActivity activity : activities) {
-                activity.preSuspend(cb);
+                executorService.submit(activity.preSuspend(cb));
             }
             if (timeoutMillis > 0) {
                 timer = new Timer();
@@ -149,9 +155,7 @@ public class SuspendController implements Service<SuspendController> {
         if(state != State.RUNNING) {
             //if the activity is added when we are not running we just immediately suspend it
             //this should only happen at boot, so there should be no outstanding requests anyway
-            activity.suspended(() -> {
-
-            });
+            activity.suspended(() -> null);
         }
     }
 
@@ -174,9 +178,11 @@ public class SuspendController implements Service<SuspendController> {
         return state;
     }
 
-    private synchronized void activityPaused() {
+    private synchronized Void activityPaused() {
         --outstandingCount;
         handlePause();
+
+        return null;
     }
 
     private void handlePause() {
@@ -219,6 +225,10 @@ public class SuspendController implements Service<SuspendController> {
 
     public InjectedValue<NotificationHandlerRegistry> getNotificationHandlerRegistry() {
         return notificationHandlerRegistry;
+    }
+
+    public void setExecutorService(ExecutorService executorService) {
+        this.executorService = executorService;
     }
 
     public enum State {

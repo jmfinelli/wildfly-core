@@ -44,8 +44,7 @@ public class WFCORE4967_TestCase {
 
     private RequestController suspendedRCWithQueuedTasks(int i, Runnable whenExecuted) {
         RequestController requestController = new RequestController(false, () -> null);
-        requestController.suspended(() -> {
-        });
+        requestController.suspended(() -> null);
 
         for (int taskNo = 0; taskNo < TASKS_QTY; taskNo++) {
             requestController.queueTask(null, null, task -> whenExecuted.run(), 0, null, false, false);
