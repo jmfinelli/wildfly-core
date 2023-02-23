@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jboss.as.controller.notification.NotificationHandlerRegistry;
 import org.jboss.as.server.logging.ServerLogger;
@@ -45,7 +46,7 @@ public class SuspendController implements Service<SuspendController> {
 
     private final InjectedValue<NotificationHandlerRegistry> notificationHandlerRegistry = new InjectedValue<>();
 
-    private int outstandingCount;
+    private AtomicInteger outstandingCount;
 
     private boolean startSuspended;
 
@@ -77,17 +78,17 @@ public class SuspendController implements Service<SuspendController> {
         for(OperationListener listener: new ArrayList<>(operationListeners)) {
             listener.suspendStarted();
         }
-        outstandingCount = activities.size();
-        if (outstandingCount == 0) {
+        outstandingCount = new AtomicInteger(activities.size());
+        if (outstandingCount.get() == 0) {
             handlePause();
         } else {
             final ExecutorService executorService = this.executorService;
-            CountingRequestCountCallback cb = new CountingRequestCountCallback(outstandingCount, () -> {
+            CountingRequestCountCallback cb = new CountingRequestCountCallback(outstandingCount.get(), () -> {
                 state = State.SUSPENDING;
                 // Processing the deque with an {@link Iterator} means that {@link ServerActivity}
                 // will be suspe nded with a LIFO logic
                 for (ServerActivity activity : activities) {
-                    executorService.submit(activity.suspended(SuspendController.this.listener));
+                    executorService.submit(activity.suspended(this.listener));
                 }
                 return null;
             });
@@ -179,14 +180,14 @@ public class SuspendController implements Service<SuspendController> {
     }
 
     private synchronized Void activityPaused() {
-        --outstandingCount;
+        outstandingCount.decrementAndGet();
         handlePause();
 
         return null;
     }
 
     private void handlePause() {
-        if (outstandingCount == 0) {
+        if (outstandingCount.get() == 0) {
             state = State.SUSPENDED;
             if (timer != null) {
                 timer.cancel();
